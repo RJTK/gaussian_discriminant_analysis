@@ -197,9 +197,9 @@ class testDA_ll(unittest.TestCase):
         plt.show()
         return
 
-    def test000(self):
+    def test001(self):
         np.random.seed(0)
-        N = 2000
+        N = 1000
         p = 2
         n_classes = 3
         X, y = datasets.make_classification(n_samples=N, n_features=p,
@@ -210,9 +210,9 @@ class testDA_ll(unittest.TestCase):
                                   "learning_curves001.png")
         return
 
-    def test001(self):
+    def test002(self):
         np.random.seed(0)
-        N = 2000
+        N = 2500
         p = 10
         n_classes = 3
         X, y = datasets.make_classification(n_samples=N, n_features=p,

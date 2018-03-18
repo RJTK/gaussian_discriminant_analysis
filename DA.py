@@ -1,6 +1,7 @@
 import numpy as np
 
 from scipy import stats
+from sklearn.base import BaseEstimator, ClassifierMixin
 import logging
 
 # Available fitting methods
@@ -10,10 +11,11 @@ BAYES_MEAN = "Mean"
 BAYES_FULL = "Bayes"
 
 
-class DiscriminantAnalysis:
-    def __init__(self, do_logging=False):
+class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
+    def __init__(self, do_logging=False, fit_method=MAXIMUM_LIKELIHOOD):
         self._fitted = False
         self.do_logging = do_logging
+        self.fit_method = fit_method
         if do_logging:
             self.logger = logging.getLogger(__name__)
             self.logger.setLevel(logging.DEBUG)
@@ -23,7 +25,8 @@ class DiscriminantAnalysis:
             self.logger.addHandler(fh)
         return
 
-    def fit(self, X, y, method=MAXIMUM_LIKELIHOOD):
+    def fit(self, X, y, method=None,
+            alpha=1.0, nu=2, k=1./100):
         """
         params:
           X (np.array N x p): The data matrix
@@ -33,6 +36,13 @@ class DiscriminantAnalysis:
             -"MAP": The Bayesian MAP estimate with conjugate priors
             -"Mean": Use Bayesian posterior mean point estimates
             -"Bayes": Fit a fully Bayesian model with conjugate priors
+          alpha (float): Prior value for Dir(alpha), ignored for ML
+          nu (float): Covariance pseudo will be p + nu, ignored for ML
+          k (float): Mean pseudo data, ignored for ML.
+
+        Increasing alpha, nu, or k will increase the amount of regularization,
+        or in other words, add more weight to the prior belief.  We use the
+        data dependent priors mean(X) and diag(cov(X)) for each prior.
         """
         N = X.shape[0]  # Number of samples
         p = X.shape[1]  # Data dimension
@@ -63,15 +73,25 @@ class DiscriminantAnalysis:
         X = {c: np.vstack([X[i, :] for i in range(N) if y[i] == c])
              for c in C}
 
+        if method is None:
+            method = self.fit_method
+
         if method == MAXIMUM_LIKELIHOOD:
             self._fit_ML(X, y)
         else:  # Bayesian method
             # Specify priors
-            self.alpha = 1.0
-            self.m = {c: np.mean(X[c]) for c in self.C}
-            self.S = {c: np.diag(np.std(X[c], axis=0)) for c in self.C}
-            self.nu = p + 2  # Covariance pseudo-data
-            self.k = 1. / 100  # Mean pseudo-data
+            self.m = {c: np.mean(
+                np.vstack([np.mean(X[c], axis=0) for c in self.C]), axis=0)
+                      for c in self.C}
+            self.S = {c: np.diag(
+                np.mean(np.vstack([np.std(X[c], axis=0)]), axis=0))
+                      for c in self.C}
+
+            # TODO: I should check that these are numeric values?
+            self.alpha = alpha  # Dir(alpha) prior on pi
+            self.nu = p + nu  # Covariance pseudo-data
+            self.k = k  # Mean pseudo-data
+
             if method == BAYES_MAP:
                 self._fit_MAP(X, y)
             elif method == BAYES_MEAN:
@@ -90,39 +110,80 @@ class DiscriminantAnalysis:
             self.logger.debug("pi = %s" % self.pi)
             self.logger.debug("mu = %s" % self.mu)
             self.logger.debug("Sigma = %s" % self.Sigma)
-        return
+        return self
 
-    def density(self, X):
+    def predict_proba(self, X, ret_array=True):
         """
         Compute the predicted probability of the data in X for each class.
+
+        params:
+          X (np.array n x p): Points at which to evaluate the density
+          ret_array (bool): Whether to return a {cls: prob} dictionary (false)
+            or an n x num_catagories array.  In the latter case, the
+            ordering will be given by the order of self.C
         """
         if not self._fitted:
             raise ValueError("Must fit the model first!")
         if self._fitted != BAYES_FULL:  # Gaussian posterior
-            prob = lambda c: self.pi[c] *\
-                   stats.multivariate_normal.pdf(X, mean=self.mu[c],
-                                                 cov=self.Sigma[c])
+            def prob(c):
+                try:
+                    return self.pi[c] *\
+                        stats.multivariate_normal.pdf(X, mean=self.mu[c],
+                                                      cov=self.Sigma[c])
+                except np.linalg.LinAlgError as e:  # Singular matrix
+                    if self.do_logging:
+                        self.loger.error("LinAlgError on normal.pdf "
+                                         "mean = %s, cov = %s"
+                                         % (self.mu[c], self.Sigma[c]))
+                    raise e
+
         else:  # T-distributed posterior
             # scipy.stats has no multivariate t distribution
             # I can roll my own but want to get the other methods
             # ironed out first.
             raise NotImplementedError
 
-        predictions = {}
+        density = {}
         normalizer = np.zeros(X.shape[0])
         for c in self.C:
-            P = prob(c)
+            try:
+                P = prob(c)
+            except np.linalg.LinAlgError:  # Singular matrix
+                P = np.nan * np.empty(X.shape[0])
+                if self.do_logging:
+                    self.logger.error("Caught LinAlgError when evaluating "
+                                      "probability, attempting to continue")
+                density[c] = P
+                continue  # Skip updating the normalizer
+
+            density[c] = P
+            normalizer += P
+
             if self.do_logging:
                 self.logger.debug("Unnormalized density for class %s: %s" %
                                   (c, P))
-            predictions[c] = P
-            normalizer += P
 
         for c in self.C:
-            predictions[c] = predictions[c] / normalizer
+            # Could raise a zerodivision runtime warning
+            density[c] = density[c] / normalizer
 
         if self.do_logging:
             self.logger.debug("density normalizer: %s" % normalizer)
+        if ret_array:
+            density = np.vstack(density[c] for c in density.keys()).T
+        return density
+
+    # Augment this to consider a loss function?
+    def predict(self, X):
+        """
+        Predicts the class label of each point in X by simply picking the
+        most probable label.
+
+        params:
+          X (np.array N x p): The data to label
+        """
+        D = self.predict_proba(X)
+        predictions = self.C[np.argmax([D[c] for c in self.C], axis=0)]
         return predictions
 
     def _fit_ML(self, X, y=None):
