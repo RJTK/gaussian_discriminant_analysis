@@ -5,3 +5,5 @@ Toy implementations of some Gaussian discriminant analysis algorithms.  Allows f
 ![alt tag](https://github.com/RJTK/gaussian_discriminant_analysis/blob/master/figures/FULL_boundaries.png)
 
 ![alt tag](https://github.com/RJTK/gaussian_discriminant_analysis/blob/master/figures/learning_curves002.png)
+
+![alt tag](https://github.com/RJTK/gaussian_discriminant_analysis/blob/master/figures/learning_curves_digits.png)

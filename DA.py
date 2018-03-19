@@ -15,8 +15,6 @@ BAYES_FULL = "Bayes"
 # Things I could add...
 # TODO: Tie covariance matrices accross classes
 # TODO: Isotropic covariances
-# TODO: Unnormalized log probabilities for hard class predictions
-# -- This would be much more numerically robust
 # TODO: Have a predict method that optimizes a loss against the posterior
 
 
