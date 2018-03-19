@@ -12,8 +12,19 @@ BAYES_MAP = "MAP"
 BAYES_MEAN = "Mean"
 BAYES_FULL = "Bayes"
 
+# Things I could add...
+# TODO: Tie covariance matrices accross classes
+# TODO: Isotropic covariances
+# TODO: Unnormalized log probabilities for hard class predictions
+# -- This would be much more numerically robust
+# TODO: Have a predict method that optimizes a loss against the posterior
+
 
 def mvar_t_pdf(X, mu, Sigma, nu):
+    return np.exp(log_mvar_t_pdf(X, mu, Sigma, nu))
+
+
+def log_mvar_t_pdf(X, mu, Sigma, nu):
     """
     Evaluate the density function of a multivariate student t
     distribution at the points X
@@ -24,6 +35,7 @@ def mvar_t_pdf(X, mu, Sigma, nu):
       Sigma (np.array p x p): The scale matrix
       nu (int): degrees of freedom parameter
     """
+
     p = X.shape[1]
     log_ret = 0
     # log Z (normalizing constant)
@@ -44,7 +56,7 @@ def mvar_t_pdf(X, mu, Sigma, nu):
     z = sp.linalg.solve_triangular(L, U.T, lower=True)
     log_quad = np.log1p(np.linalg.norm(z, ord=2, axis=0)**2)
     log_ret -= 0.5 * (nu + p) * log_quad
-    return np.exp(log_ret)
+    return log_ret
 
 
 class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
@@ -216,7 +228,56 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
             density = np.vstack(density[c] for c in density.keys()).T
         return density
 
-    # Augment this to consider a loss function?
+    def predict_log_proba(self, X, ret_array=True):
+        """Return un-normalized log probabilities"""
+
+        if not self._fitted:
+            raise ValueError("Must fit the model first!")
+        if self._fitted != BAYES_FULL:  # Gaussian posterior
+            def log_prob(c):
+                try:
+                    return self.pi[c] *\
+                        stats.multivariate_normal.logpdf(X, mean=self.mu[c],
+                                                         cov=self.Sigma[c])
+                except np.linalg.LinAlgError as e:  # Singular matrix
+                    if self.do_logging:
+                        self.loger.error("LinAlgError on normal.pdf "
+                                         "mean = %s, cov = %s"
+                                         % (self.mu[c], self.Sigma[c]))
+                    raise e
+
+        else:  # T-distributed posterior
+            def log_prob(c):
+                try:
+                    return self.pi[c] *\
+                        log_mvar_t_pdf(X, self.mu[c], self.Sigma[c],
+                                       self.nu_post[c])
+                except np.linalg.LinAlgError as e:  # Singular matrix
+                    if self.do_logging:
+                        self.loger.error("LinAlgError on normal.pdf "
+                                         "mean = %s, cov = %s"
+                                         % (self.mu[c], self.Sigma[c]))
+                    raise e
+
+        log_density = {}
+        for c in self.C:
+            try:
+                log_P = log_prob(c)
+            except np.linalg.LinAlgError:  # Singular matrix
+                log_P = np.nan * np.empty(X.shape[0])
+                if self.do_logging:
+                    self.logger.error("Caught LinAlgError when evaluating "
+                                      "probability, attempting to continue")
+                log_density[c] = np.zeros_like(log_P)
+                continue  # Skip updating the normalizer
+
+            log_density[c] = log_P
+
+        if ret_array:
+            log_density = np.vstack(log_density[c]
+                                    for c in log_density.keys()).T
+        return log_density
+
     def predict(self, X):
         """
         Predicts the class label of each point in X by simply picking the
@@ -225,8 +286,8 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
         params:
           X (np.array N x p): The data to label
         """
-        D = self.predict_proba(X)
-        predictions = self.C[np.argmax([D[c] for c in self.C], axis=0)]
+        log_D = self.predict_log_proba(X)
+        predictions = self.C[np.argmax(log_D, axis=1)]
         return predictions
 
     def _fit_ML(self, X, y=None):

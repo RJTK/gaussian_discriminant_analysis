@@ -3,6 +3,8 @@ import numpy as np
 
 from sklearn import datasets
 from sklearn.metrics import log_loss
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from sklearn.model_selection import learning_curve
 from matplotlib import pyplot as plt
 
@@ -155,13 +157,14 @@ class testDA_visualize(unittest.TestCase):
 
 class testDA_ll(unittest.TestCase):
     def plot_learning_curve(self, estimator, X, y, ax, train_sizes,
-                            color="b"):
+                            color="b", scoring="neg_log_loss",
+                            ylabel=None):
         """
         Generate a simple plot of the test and training learning curve.
         """
         train_sizes, train_scores, test_scores = learning_curve(
-            estimator, X, y, cv=10, n_jobs=4, train_sizes=train_sizes,
-            scoring="neg_log_loss")
+            estimator, X, y, cv=5, n_jobs=4, train_sizes=train_sizes,
+            scoring=scoring)
         train_scores_mean = np.mean(train_scores, axis=1)
         train_scores_std = np.std(train_scores, axis=1)
         test_scores_mean = np.mean(test_scores, axis=1)
@@ -177,7 +180,8 @@ class testDA_ll(unittest.TestCase):
         ax.plot(train_sizes, test_scores_mean, 'o-', color=color)
         return ax
 
-    def learning_curve_plots(self, X, y, title=None, save_file=None):
+    def learning_curve_plots(self, X, y, title=None, save_file=None,
+                             scoring="neg_log_loss", ylabel=None):
         fig, ax = plt.subplots(1, 1)
         DA_ML = DiscriminantAnalysis(fit_method=MAXIMUM_LIKELIHOOD)
         DA_MAP = DiscriminantAnalysis(fit_method=BAYES_MAP)
@@ -185,16 +189,16 @@ class testDA_ll(unittest.TestCase):
         DA_FULL = DiscriminantAnalysis(fit_method=BAYES_FULL)
 
         train_sizes = np.linspace(0.1, 1.0, 15)
-        ax = self.plot_learning_curve(DA_ML, X, y, ax,
+        ax = self.plot_learning_curve(DA_ML, X, y, ax, scoring=scoring,
                                       train_sizes=train_sizes,
                                       color="b")
-        ax = self.plot_learning_curve(DA_MAP, X, y, ax,
+        ax = self.plot_learning_curve(DA_MAP, X, y, ax, scoring=scoring,
                                       train_sizes=train_sizes,
                                       color="r")
-        ax = self.plot_learning_curve(DA_MEAN, X, y, ax,
+        ax = self.plot_learning_curve(DA_MEAN, X, y, ax, scoring=scoring,
                                       train_sizes=train_sizes,
                                       color="g")
-        ax = self.plot_learning_curve(DA_FULL, X, y, ax,
+        ax = self.plot_learning_curve(DA_FULL, X, y, ax, scoring=scoring,
                                       train_sizes=train_sizes,
                                       color="m")
 
@@ -208,7 +212,11 @@ class testDA_ll(unittest.TestCase):
         plt.legend()
         plt.grid()
         plt.xlabel("num samples", fontsize=14)
-        plt.ylabel("Log Loss", fontsize=14)
+        if ylabel is None:
+            plt.ylabel("loss", fontsize=14)
+        else:
+            plt.ylabel(ylabel, fontsize=14)
+
         if title is None:
             plt.title("Learning Curves", fontsize=14)
         else:
@@ -229,7 +237,8 @@ class testDA_ll(unittest.TestCase):
                                             n_clusters_per_class=1,
                                             n_classes=n_classes)
         self.learning_curve_plots(X, y, title=r"Learning Curves, $p = %d$" % p,
-                                  save_file="./figures/learning_curves001.png")
+                                  save_file="./figures/learning_curves001.png",
+                                  ylabel="Log Loss")
         return
 
     def test002(self):
@@ -243,5 +252,25 @@ class testDA_ll(unittest.TestCase):
                                             n_clusters_per_class=2,
                                             n_classes=n_classes)
         self.learning_curve_plots(X, y, title=r"Learning Curves, $p = %d$" % p,
-                                  save_file="./figures/learning_curves002.png")
+                                  save_file="./figures/learning_curves002.png",
+                                  ylabel="Log Loss")
+        return
+
+    def test003(self):
+        p = 25
+
+        X, y = datasets.load_digits(10, True)
+        ss = StandardScaler()
+        X = ss.fit_transform(X)
+        # PCA is not the best projection for this algorithm
+        pca = PCA(n_components=p)
+        X = pca.fit_transform(X)
+        DA = DiscriminantAnalysis()
+        DA.fit(X, y)
+        self.learning_curve_plots(X, y, title=r"Learning Curves "
+                                  "(digits data with PCA: $p = %d$)" % p,
+                                  save_file="./figures/"
+                                  "learning_curves_digits.png",
+                                  scoring="accuracy",
+                                  ylabel="Accuracy")
         return
