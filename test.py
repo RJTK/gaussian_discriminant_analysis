@@ -2,7 +2,6 @@ import unittest
 import numpy as np
 
 from sklearn import datasets
-from sklearn.metrics import log_loss
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.model_selection import learning_curve
@@ -26,7 +25,7 @@ class testDA_fits(unittest.TestCase):
 
         DA = DiscriminantAnalysis(do_logging=True)
         DA.fit(X, y, method=MAXIMUM_LIKELIHOOD)
-        P = DA.predict_proba(X)
+        P = DA.predict_proba(X, ret_array=False)
         assert np.allclose(np.sum(P[c] for c in C), 1.0)
         return
 
@@ -39,7 +38,7 @@ class testDA_fits(unittest.TestCase):
 
         DA = DiscriminantAnalysis(do_logging=True)
         DA.fit(X, y, method=BAYES_MAP)
-        P = DA.predict_proba(X)
+        P = DA.predict_proba(X, ret_array=False)
         assert np.allclose(np.sum(P[c] for c in C), 1.0)
         return
 
@@ -51,8 +50,8 @@ class testDA_fits(unittest.TestCase):
         y = np.random.choice(C, size=N)
 
         DA = DiscriminantAnalysis(do_logging=True)
-        DA.fit(X, y, method=BAYES_MEAN, do_logging=True)
-        P = DA.predict_proba(X)
+        DA.fit(X, y, method=BAYES_MEAN)
+        P = DA.predict_proba(X, ret_array=False)
         assert np.allclose(np.sum(P[c] for c in C), 1.0)
         return
 
@@ -65,7 +64,8 @@ class testDA_fits(unittest.TestCase):
 
         DA = DiscriminantAnalysis(do_logging=True)
         DA.fit(X, y, method=BAYES_FULL)
-        DA.predict_proba(X)
+        P = DA.predict_proba(X, ret_array=False)
+        assert np.allclose(np.sum(P[c] for c in C), 1.0)
         return
 
 
@@ -155,7 +155,7 @@ class testDA_visualize(unittest.TestCase):
         return
 
 
-class testDA_ll(unittest.TestCase):
+class testDA_learning_curves(unittest.TestCase):
     def plot_learning_curve(self, estimator, X, y, ax, train_sizes,
                             color="b", scoring="neg_log_loss",
                             ylabel=None):
@@ -259,7 +259,11 @@ class testDA_ll(unittest.TestCase):
     def test003(self):
         p = 25
 
+        # Load, then shuffle the dataset
         X, y = datasets.load_digits(10, True)
+        Xy = np.random.permutation(np.hstack((X, y[:, None])))
+        X, y = Xy[:, :-1], Xy[:, -1]
+
         ss = StandardScaler()
         X = ss.fit_transform(X)
         # PCA is not the best projection for this algorithm
