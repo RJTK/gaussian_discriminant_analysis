@@ -61,9 +61,9 @@ class testDA_fits(unittest.TestCase):
         X = np.random.normal(size=(N, p))
         y = np.random.choice(C, size=N)
 
-        DA = DiscriminantAnalysis()
-        DA.fit(X, y, method=BAYES_FULL, do_logging=True)
-        # DA.predict_proba(X)
+        DA = DiscriminantAnalysis(do_logging=True)
+        DA.fit(X, y, method=BAYES_FULL)
+        DA.predict_proba(X)
         return
 
 
@@ -74,7 +74,7 @@ def visualize_3class(X, y_cls, DA, title=None, save_file=None):
     y = np.linspace(1.1 * y_min, 1.1 * y_max, 500)
     xx, yy = np.meshgrid(x, y)
     xxyy = np.array([xx.ravel(), yy.ravel()]).T
-    P = DA.predict_proba(xxyy)
+    P = DA.predict_proba(xxyy, ret_array=False)
     P = {c: P[c].reshape(xx.shape) for c in P.keys()}
     Z = np.stack((P[c] for c in P.keys()), -1)
 
@@ -141,6 +141,17 @@ class testDA_visualize(unittest.TestCase):
                          save_file="./figures/MEAN_boundaries.png")
         return
 
+    def test003_FULL(self):
+        X, y_cls = self.X, self.y_cls
+
+        DA = DiscriminantAnalysis()
+        DA.fit(X, y_cls, method=BAYES_FULL)
+
+        visualize_3class(X, y_cls, DA,
+                         title="Full Bayes Decision Boundaries",
+                         save_file="./figures/FULL_boundaries.png")
+        return
+
 
 class testDA_ll(unittest.TestCase):
     def plot_learning_curve(self, estimator, X, y, ax, train_sizes,
@@ -166,32 +177,43 @@ class testDA_ll(unittest.TestCase):
         ax.plot(train_sizes, test_scores_mean, 'o-', color=color)
         return ax
 
-    def learning_curve_plots(self, X, y, save_file=None):
+    def learning_curve_plots(self, X, y, title=None, save_file=None):
         fig, ax = plt.subplots(1, 1)
         DA_ML = DiscriminantAnalysis(fit_method=MAXIMUM_LIKELIHOOD)
         DA_MAP = DiscriminantAnalysis(fit_method=BAYES_MAP)
         DA_MEAN = DiscriminantAnalysis(fit_method=BAYES_MEAN)
+        DA_FULL = DiscriminantAnalysis(fit_method=BAYES_FULL)
 
+        train_sizes = np.linspace(0.1, 1.0, 15)
         ax = self.plot_learning_curve(DA_ML, X, y, ax,
-                                      train_sizes=np.linspace(.1, 1.0, 10),
+                                      train_sizes=train_sizes,
                                       color="b")
         ax = self.plot_learning_curve(DA_MAP, X, y, ax,
-                                      train_sizes=np.linspace(.1, 1.0, 10),
+                                      train_sizes=train_sizes,
                                       color="r")
         ax = self.plot_learning_curve(DA_MEAN, X, y, ax,
-                                      train_sizes=np.linspace(.1, 1.0, 10),
+                                      train_sizes=train_sizes,
                                       color="g")
+        ax = self.plot_learning_curve(DA_FULL, X, y, ax,
+                                      train_sizes=train_sizes,
+                                      color="m")
+
         ax.plot([], label="Training", linestyle="--", color="k")
         ax.plot([], label="Testing", linestyle="-", color="k")
         ax.plot([], label="ML", color="b")
         ax.plot([], label="MAP", color="r")
         ax.plot([], label="MEAN", color="g")
+        ax.plot([], label="FULL", color="m")
 
         plt.legend()
         plt.grid()
         plt.xlabel("num samples", fontsize=14)
         plt.ylabel("Log Loss", fontsize=14)
-        plt.title("Learning Curves", fontsize=14)
+        if title is None:
+            plt.title("Learning Curves", fontsize=14)
+        else:
+            plt.title(title, fontsize=14)
+
         if save_file is not None:
             plt.savefig(save_file)
         plt.show()
@@ -199,20 +221,20 @@ class testDA_ll(unittest.TestCase):
 
     def test001(self):
         np.random.seed(0)
-        N = 1000
+        N = 500
         p = 2
         n_classes = 3
         X, y = datasets.make_classification(n_samples=N, n_features=p,
                                             n_informative=p, n_redundant=0,
                                             n_clusters_per_class=1,
                                             n_classes=n_classes)
-        self.learning_curve_plots(X, y, save_file="./figures/"
-                                  "learning_curves001.png")
+        self.learning_curve_plots(X, y, title=r"Learning Curves, $p = %d$" % p,
+                                  save_file="./figures/learning_curves001.png")
         return
 
     def test002(self):
         np.random.seed(0)
-        N = 2500
+        N = 500
         p = 10
         n_classes = 3
         X, y = datasets.make_classification(n_samples=N, n_features=p,
@@ -220,6 +242,6 @@ class testDA_ll(unittest.TestCase):
                                             n_redundant=0,
                                             n_clusters_per_class=2,
                                             n_classes=n_classes)
-        self.learning_curve_plots(X, y, save_file="./figures/"
-                                  "learning_curves002.png")
+        self.learning_curve_plots(X, y, title=r"Learning Curves, $p = %d$" % p,
+                                  save_file="./figures/learning_curves002.png")
         return

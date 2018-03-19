@@ -1,6 +1,8 @@
 import numpy as np
 
+import scipy as sp
 from scipy import stats
+from scipy.special import gammaln
 from sklearn.base import BaseEstimator, ClassifierMixin
 import logging
 
@@ -9,6 +11,40 @@ MAXIMUM_LIKELIHOOD = "ML"
 BAYES_MAP = "MAP"
 BAYES_MEAN = "Mean"
 BAYES_FULL = "Bayes"
+
+
+def mvar_t_pdf(X, mu, Sigma, nu):
+    """
+    Evaluate the density function of a multivariate student t
+    distribution at the points X
+
+    params:
+      X (np.array n x p): The points at which to evaluate the density
+      mu (np.array p): The mean parameter
+      Sigma (np.array p x p): The scale matrix
+      nu (int): degrees of freedom parameter
+    """
+    p = X.shape[1]
+    log_ret = 0
+    # log Z (normalizing constant)
+    logZ = ((p / 2) * np.log(np.pi) + gammaln(nu / 2) -
+            gammaln((nu / 2) + (p / 2)))
+    log_ret -= logZ
+
+    V = nu * Sigma
+    L = np.linalg.cholesky(V)  # V = L @ L.T
+    half_logdetV = np.sum(np.log(np.diag(L)))  # log det V
+    log_ret -= half_logdetV
+
+    # z = L_inv @ (x - mu) Remember: (LL.T)^-1 = L.T^-1 L^-1
+    # L.T @ z = x - mu
+    # => L.T @ z = U.T
+
+    U = X - mu[None, :]
+    z = sp.linalg.solve_triangular(L, U.T, lower=True)
+    log_quad = np.log1p(np.linalg.norm(z, ord=2, axis=0)**2)
+    log_ret -= 0.5 * (nu + p) * log_quad
+    return np.exp(log_ret)
 
 
 class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
@@ -138,10 +174,17 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
                     raise e
 
         else:  # T-distributed posterior
-            # scipy.stats has no multivariate t distribution
-            # I can roll my own but want to get the other methods
-            # ironed out first.
-            raise NotImplementedError
+            def prob(c):
+                try:
+                    return self.pi[c] *\
+                        mvar_t_pdf(X, self.mu[c], self.Sigma[c],
+                                   self.nu_post[c])
+                except np.linalg.LinAlgError as e:  # Singular matrix
+                    if self.do_logging:
+                        self.loger.error("LinAlgError on normal.pdf "
+                                         "mean = %s, cov = %s"
+                                         % (self.mu[c], self.Sigma[c]))
+                    raise e
 
         density = {}
         normalizer = np.zeros(X.shape[0])
@@ -153,7 +196,7 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
                 if self.do_logging:
                     self.logger.error("Caught LinAlgError when evaluating "
                                       "probability, attempting to continue")
-                density[c] = P
+                density[c] = np.zeros_like(P)
                 continue  # Skip updating the normalizer
 
             density[c] = P
