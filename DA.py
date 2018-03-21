@@ -58,10 +58,12 @@ def log_mvar_t_pdf(X, mu, Sigma, nu):
 
 
 class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
-    def __init__(self, do_logging=False, fit_method=MAXIMUM_LIKELIHOOD):
+    def __init__(self, do_logging=False, fit_method=MAXIMUM_LIKELIHOOD,
+                 diag_cov=False):
         self._fitted = False
         self.do_logging = do_logging
         self.fit_method = fit_method
+        self.diag_cov = diag_cov
         if do_logging:
             self.logger = logging.getLogger(__name__)
             self.logger.setLevel(logging.DEBUG)
@@ -293,6 +295,8 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
         self.pi = {c: self.N_c[c] / self.N for c in self.C}  # Class probs
         self.mu = {c: np.mean(X[c], axis=0) for c in self.C}  # Class means
         self.Sigma = {c: np.cov(X[c], bias=True, rowvar=False) for c in self.C}
+        if self.diag_cov:
+            self.Sigma = {c: np.diag(np.diag(self.Sigma[c])) for c in self.C}
         self._fitted = MAXIMUM_LIKELIHOOD
         return
 
@@ -315,6 +319,9 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
 
     def _fit_MAP(self, X, y=None):
         # Fits via Bayesian MAP.  X should be a {label: Array} look up table.
+        if self.diag_cov:
+            raise ValueError("Diagonal covariance restriction is only "
+                             "supported for maximum likelihood.")
 
         p, C = self.p, self.C
         alpha_hat, k_hat, m_hat, nu_hat, S_hat = self._bayes_update(X, y)
@@ -328,6 +335,9 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
 
     def _fit_mean(self, X, y=None):
         # Fits via Bayesian posterior mean.  X is {label: Array} look up table.
+        if self.diag_cov:
+            raise ValueError("Diagonal covariance restriction is only "
+                             "supported for maximum likelihood.")
 
         p, C = self.p, self.C
         alpha_hat, k_hat, m_hat, nu_hat, S_hat = self._bayes_update(X, y)
@@ -339,6 +349,10 @@ class DiscriminantAnalysis(BaseEstimator, ClassifierMixin):
         return
 
     def _fit_full(self, X, y=None):
+        if self.diag_cov:
+            raise ValueError("Diagonal covariance restriction is only "
+                             "supported for maximum likelihood.")
+
         p, C = self.p, self.C
         alpha_hat, k_hat, m_hat, nu_hat, S_hat = self._bayes_update(X, y)
         alpha0_hat = sum(alpha_hat[c] for c in C)

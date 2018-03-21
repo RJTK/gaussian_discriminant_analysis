@@ -105,7 +105,8 @@ class testDA_visualize(unittest.TestCase):
         p = 2
         n_classes = 3
         X, y_cls = datasets.make_classification(n_samples=N, n_features=p,
-                                                n_informative=p, n_redundant=0,
+                                                n_informative=p,
+                                                n_redundant=0,
                                                 n_clusters_per_class=1,
                                                 n_classes=n_classes,
                                                 weights=[0.3, 0.5])
@@ -120,6 +121,15 @@ class testDA_visualize(unittest.TestCase):
 
         visualize_3class(X, y_cls, DA, title="ML Decision Boundaries",
                          save_file="./figures/ML_boundaries.png")
+        return
+
+    def test004_ML_diag(self):
+        X, y_cls = self.X, self.y_cls
+        DA = DiscriminantAnalysis(diag_cov=True)
+        DA.fit(X, y_cls, method=MAXIMUM_LIKELIHOOD)
+
+        visualize_3class(X, y_cls, DA, title="ML Decision Boundaries",
+                         save_file="./figures/ML_diag_cov.png")
         return
 
     def test001_MAP(self):
