@@ -266,8 +266,8 @@ class testDA_learning_curves(unittest.TestCase):
                                   ylabel="Log Loss")
         return
 
-    def test003(self):
-        p = 25
+    def test003_digits(self):
+        p = 18
 
         # Load, then shuffle the dataset
         X, y = datasets.load_digits(10, True)
@@ -285,6 +285,24 @@ class testDA_learning_curves(unittest.TestCase):
                                   "(digits data with PCA: $p = %d$)" % p,
                                   save_file="./figures/"
                                   "learning_curves_digits.png",
+                                  scoring="accuracy",
+                                  ylabel="Accuracy")
+        return
+
+    def test004_cancer(self):
+        # Load, then shuffle the dataset
+        X, y = datasets.load_breast_cancer(True)
+        Xy = np.random.permutation(np.hstack((X, y[:, None])))
+        X, y = Xy[:, :-1], Xy[:, -1]
+
+        ss = StandardScaler()
+        X = ss.fit_transform(X)
+        DA = DiscriminantAnalysis()
+        DA.fit(X, y)
+        self.learning_curve_plots(X, y, title=r"Learning Curves for breast "
+                                  "cancer data.",
+                                  save_file="./figures/"
+                                  "learning_curves_cancer.png",
                                   scoring="accuracy",
                                   ylabel="Accuracy")
         return
